@@ -2,7 +2,7 @@ import { AlertHandler } from '../../lib/helpers/chrome/alertHandler';
 import localStorageHelpers from '../../lib/helpers/chrome/localStorage';
 import { WgKeys } from '../../lib/helpers/chrome/localStorageKeys';
 import { getDomainNameFromURL } from '../../lib/helpers/phishing/parseDomainHelper';
-import { urlIsPhishingWarning } from '../../lib/helpers/util';
+import { filterURLQueryParameters, urlIsPhishingWarning } from '../../lib/helpers/util';
 import { ExtensionSettings } from '../../lib/settings';
 import { AlertDetail } from '../../models/Alert';
 import { RecommendedAction } from '../../models/PhishingResponse';
@@ -22,7 +22,11 @@ export async function checkUrlForPhishing(tab: chrome.tabs.Tab) {
   // do not scan if domain is browser native page
   if (hasBrowserPrefix(url)) return;
 
-  const pdsResponse = await domainScan(url);
+  // Scrub the URL of sensitive query parameters before any scan
+  const scrubbedUrl = filterURLQueryParameters(url);
+
+  const pdsResponse = await domainScan(scrubbedUrl);
+
   chrome.storage.local.set({ currentSite: pdsResponse });
 
   const recentlyCreatedWarning = pdsResponse?.riskFactors?.find(
@@ -59,7 +63,8 @@ export async function checkUrlForPhishing(tab: chrome.tabs.Tab) {
   const currentUrl = (await chrome.tabs.get(tab.id)).url;
   const currentDomainName = getDomainNameFromURL(currentUrl || '');
   const tabExists = currentDomainName === pdsResponse?.domainName;
-  const shouldBlock = pdsResponse?.recommendedAction === RecommendedAction.Block && settings?.phishingDetection && tabExists;
+  const shouldBlock =
+    pdsResponse?.recommendedAction === RecommendedAction.Block && settings?.phishingDetection && tabExists;
   const criticalRiskFactor: RiskFactor | undefined = pdsResponse?.riskFactors?.find(
     (warning) => warning.severity === Severity.Critical
   );
