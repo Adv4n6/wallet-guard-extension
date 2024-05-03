@@ -1,5 +1,6 @@
 import Browser from 'webextension-polyfill';
 import {
+  BypassType,
   PersonalSignArgs,
   SignatureHashSignArgs,
   SignatureRequestArgs,
@@ -12,8 +13,8 @@ import { uuid4 } from '@sentry/utils';
 import { PortMessage, PortIdentifiers } from '../lib/helpers/chrome/messageHandler';
 import { convertObjectValuesToString, shouldSwapPersonalSignArgs } from '../injected/injectWalletGuard';
 
-let metamaskChainId = 1;
 const bypassed = true;
+const bypassType = BypassType.PostMessage;
 
 const sendMessageToPort = (stream: Browser.Runtime.Port, data: TransactionArgs): void => {
   const message: PortMessage = {
@@ -27,7 +28,6 @@ window.addEventListener('message', (message) => {
   const { target } = message?.data ?? {};
   let { name, data } = message?.data?.data ?? {};
   const { href } = location;
-  const chainId = metamaskChainId;
 
   if (Array.isArray(data)) {
     data = data[0];
@@ -41,12 +41,13 @@ window.addEventListener('message', (message) => {
 
       const request: SimulateRequestArgs = {
         id: uuid4(),
-        chainId: String(chainId),
+        chainId: '',
         signer: transaction.from,
         transaction,
         method: data.method,
         origin: href,
         bypassed,
+        bypassType,
       };
 
       // Forward received messages to background.js
@@ -75,7 +76,7 @@ window.addEventListener('message', (message) => {
 
         const request: SignatureRequestArgs = {
           id: uuid4(),
-          chainId: String(chainId),
+          chainId: '',
           signer,
           domain: domain,
           message: message,
@@ -83,6 +84,7 @@ window.addEventListener('message', (message) => {
           method: data.method,
           origin: href,
           bypassed,
+          bypassType,
         };
 
         // Forward received messages to background.js
@@ -93,10 +95,11 @@ window.addEventListener('message', (message) => {
           signer: 'unknown request type',
           params: data.params,
           id: uuid4(),
-          chainId: String(chainId),
+          chainId: '',
           method: data.method,
           origin: href,
           bypassed,
+          bypassType,
         };
 
         // Forward received messages to background.js
@@ -120,12 +123,13 @@ window.addEventListener('message', (message) => {
 
       const request: PersonalSignArgs = {
         id: uuid4(),
-        chainId: String(chainId),
+        chainId: '',
         origin: href,
-        bypassed,
         method: data.method,
         signer,
         signMessage,
+        bypassed,
+        bypassType,
       };
 
       // Forward received messages to background.js
@@ -142,21 +146,18 @@ window.addEventListener('message', (message) => {
 
       const request: SignatureHashSignArgs = {
         id: uuid4(),
-        chainId: String(chainId),
+        chainId: '',
         origin: href,
-        bypassed,
         method: data.method,
         signer,
         hash,
+        bypassed,
+        bypassType,
       };
 
       // Forward received messages to background.js
       const contentScriptPort = Browser.runtime.connect({ name: PortIdentifiers.WG_CONTENT_SCRIPT });
       sendMessageToPort(contentScriptPort, request);
     }
-  }
-
-  if (target === PortIdentifiers.METAMASK_INPAGE && data?.method?.includes('chainChanged')) {
-    metamaskChainId = Number(data?.params?.chainId ?? metamaskChainId);
   }
 });

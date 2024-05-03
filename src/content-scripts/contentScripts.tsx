@@ -6,10 +6,11 @@ import logger from '../lib/logger';
 import { dispatchResponse, listenToRequest, Response } from '../lib/simulation/requests';
 import type { StoredSimulation } from '../lib/simulation/storage';
 import { removeSimulation, StoredSimulationState } from '../lib/simulation/storage';
-import { TransactionArgs } from '../models/simulation/Transaction';
+import { BypassType, TransactionArgs } from '../models/simulation/Transaction';
 import { ExtensionSettings, SimulationSettings } from '../lib/settings';
 import { KNOWN_MARKETPLACES, shouldSkipBasedOnDomain } from '../lib/simulation/skip';
 import { getDomainNameFromURL } from '../lib/helpers/phishing/parseDomainHelper';
+import { supportedWallets } from '../lib/config/features';
 
 // Function to inject scripts into browser
 const addScript = (url: string) => {
@@ -42,6 +43,30 @@ const maybeRemoveId = (id: string) => {
 listenToRequest(async (request: TransactionArgs) => {
   log.info({ request }, 'Request');
   ids.push(request.id);
+
+  if (!request.chainId) {
+    console.warn('WARNING: Untrusted provider detected. Fetching trusted chainId...', request.chainId);
+
+    const metamaskExtensionPort = chrome.runtime.connect(supportedWallets.metamask);
+    metamaskExtensionPort.onMessage.addListener((msg) => {
+      if (msg.name === 'publicConfig') {
+        const { chainId } = msg.data;
+        request.chainId = chainId;
+        metamaskExtensionPort.disconnect();
+      }
+    });
+
+    // Simulate a delay so that the event handler can process the event stream which includes chainId
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // If there is still no chainId, default it to Ethereum
+    if (!request.chainId) {
+      request.chainId = '0x1';
+    }
+
+    // Set the bypassType, but do not set bypassed = true because otherwise the simulation buttons will be incorrect
+    request.bypassType = BypassType.ChainId
+  }
 
   let currentTab = window.location.href;
   if (currentTab) {

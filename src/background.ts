@@ -33,7 +33,7 @@ import { checkAllWalletsAndCreateAlerts, fetchAllWallets } from './services/http
 import { WgKeys } from './lib/helpers/chrome/localStorageKeys';
 import * as Sentry from '@sentry/react';
 import Browser from 'webextension-polyfill';
-import { SUPPORTED_CHAINS } from './lib/config/features';
+import { SUPPORTED_CHAINS, supportedWallets } from './lib/config/features';
 import { isBlocked, urlIsPhishingWarning } from './lib/helpers/util';
 import { handleRequestsBlocklist } from './services/http/requestBlocklistService';
 import { KNOWN_MARKETPLACES, shouldSkipBasedOnDomain } from './lib/simulation/skip';
@@ -327,7 +327,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 Browser.runtime.onConnect.addListener(async (remotePort: Browser.Runtime.Port) => {
   if (remotePort.name === PortIdentifiers.WG_CONTENT_SCRIPT) {
-    remotePort.onMessage.addListener(contentScriptMessageHandler);
+    remotePort.onMessage.addListener(bypassCheckMessageHandler);
   }
 });
 
@@ -392,7 +392,25 @@ chrome.commands.onCommand.addListener((command) => {
   }
 });
 
-const contentScriptMessageHandler = async (message: PortMessage, sourcePort: Browser.Runtime.Port) => {
+const bypassCheckMessageHandler = async (message: PortMessage, sourcePort: Browser.Runtime.Port) => {
+  if (!message.data.chainId) {
+    const metamaskExtensionPort = chrome.runtime.connect(supportedWallets.metamask);
+    metamaskExtensionPort.onMessage.addListener((msg) => {
+      if (msg.name === 'publicConfig') {
+        const { chainId } = msg.data;
+        message.data.chainId = chainId;
+        metamaskExtensionPort.disconnect();
+      }
+    });
+
+    // Simulate a delay so that the event handler can process the event stream which includes chainId
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // If there is still no chainId, default it to Ethereum
+    if (!message.data.chainId) {
+      message.data.chainId = '0x1';
+    }
+  }
   if (!SUPPORTED_CHAINS.includes(message.data.chainId)) return;
   const settings = await localStorageHelpers.get<ExtensionSettings>(WgKeys.ExtensionSettings);
   if (!settings?.simulationEnabled) return;

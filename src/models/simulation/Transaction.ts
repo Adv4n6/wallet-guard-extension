@@ -75,6 +75,13 @@ interface RequestArgs {
   method: SimulationMethodType | string;
   // Whether this request is a bypassed request.
   bypassed?: boolean;
+  // The type of the attempted bypass
+  bypassType?: BypassType;
+}
+
+export enum BypassType {
+  PostMessage = 'postMessage',
+  ChainId = 'chainId',
 }
 
 export type SimulationResponse =
