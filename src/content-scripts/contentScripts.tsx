@@ -22,9 +22,9 @@ const addScript = (url: string) => {
   scriptTag.onload = () => scriptTag.remove();
 };
 
-// Add vendor and injectWalletGuard
-addScript('js/vendor.js');
-addScript('js/injected/injectWalletGuard.js');
+// SUNSET NOTICE - We no longer inject to proxy transactions
+// addScript('js/vendor.js');
+// addScript('js/injected/injectWalletGuard.js');
 
 const log = logger.child({ component: 'Content-Script' });
 
